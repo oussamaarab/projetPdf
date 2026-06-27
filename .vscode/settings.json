@@ -1,0 +1,20 @@
+{
+  "intelephense.environment.phpVersion": "8.2.0",
+  "intelephense.environment.includePaths": [
+    "backend/vendor"
+  ],
+  "intelephense.files.associations": [
+    "*.php"
+  ],
+  "intelephense.files.exclude": [
+    "**/.git/**",
+    "**/.svn/**",
+    "**/.hg/**",
+    "**/CVS/**",
+    "**/.DS_Store/**",
+    "**/node_modules/**",
+    "**/bower_components/**"
+  ],
+  "php.validate.executablePath": "php",
+  "php.suggest.basic": false
+}
