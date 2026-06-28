@@ -1,5 +1,6 @@
-vendor
-node_modules
 .git
+.github
+node_modules
+vendor
 storage/logs
 .env
