@@ -1,6 +1,48 @@
+# Version control
 .git
 .github
+.gitignore
+.gitattributes
+
+# Node / frontend build artifacts (backend only)
 node_modules
-vendor
-storage/logs
+package.json
+package-lock.json
+vite.config.js
+resources/js
+resources/css
+
+# PHP / Composer – rebuilt inside the image
+vendor/
+
+# Python virtual-env – Python packages installed system-wide in the image
+venv/
+
+# Storage directories – mounted at runtime on Render (ephemeral)
+storage/logs/
+storage/framework/cache/
+storage/framework/sessions/
+storage/framework/views/
+storage/app/conversions/
+storage/app/tokens/
+
+# Environment files – injected as Render env vars, NOT baked into the image
 .env
+.env.*
+!.env.example
+
+# Laravel cache – regenerated during the build
+bootstrap/cache/*.php
+
+# Stale Windows-generated config cache
+bootstrap/cache/config.php
+bootstrap/cache/packages.php
+bootstrap/cache/services.php
+
+# IDE / editor artifacts
+.editorconfig
+.phpunit.result.cache
+*.log
+
+# Docker compose overrides (not needed in the image)
+docker-compose*.yml

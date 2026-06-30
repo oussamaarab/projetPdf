@@ -13,28 +13,34 @@ class ArchiveConversionService
     public function __construct(
         private readonly BinaryService $binaries,
         private readonly FileStorageService $files
-    ) {
-    }
+    ) {}
 
     public function process(array $tool, array $inputs, array $options, string $conversionId, string $workDir): array
     {
         return match ($tool['operation']) {
-            'create' => $this->create($tool, $inputs, $options, $conversionId),
+            'create'  => $this->create($tool, $inputs, $options, $conversionId),
             'extract' => $this->extract($tool, $inputs[0], $options, $conversionId, $workDir),
             'convert' => $this->convert($tool, $inputs[0], $options, $conversionId, $workDir),
-            default => throw new ConversionException("Unsupported archive operation [{$tool['operation']}]."),
+            default   => throw new ConversionException("Unsupported archive operation [{$tool['operation']}]."),
         };
     }
+
+    // -------------------------------------------------------------------------
 
     private function create(array $tool, array $inputs, array $options, string $conversionId): array
     {
         $extension = $tool['output_extension'] ?: 'zip';
-        $output = $this->output($tool, $inputs[0], $conversionId, $extension);
-        $command = [$this->binaries->path('seven_zip'), 'a', '-t'.$extension, $output['absolute_path']];
+        $output    = $this->output($tool, $inputs[0], $conversionId, $extension);
+        $command   = [
+            $this->binaries->path('seven_zip'),
+            'a',
+            '-t' . $extension,
+            $output['absolute_path'],
+        ];
 
         $password = $options['archive_password'] ?? $options['password'] ?? null;
         if ($password) {
-            array_push($command, '-p'.$password, '-mhe=on');
+            array_push($command, '-p' . $password, '-mhe=on');
         }
 
         foreach ($inputs as $input) {
@@ -51,30 +57,24 @@ class ArchiveConversionService
         $extractDir = "{$workDir}/extracted";
         File::ensureDirectoryExists($extractDir, 0750, true);
 
-        $binary = $this->extractBinary($input);
-        if (str_contains(strtolower(basename($binary)), 'unrar')) {
-            $command = [$binary, 'x', '-y', $input['absolute_path'], $extractDir . DIRECTORY_SEPARATOR];
-        } else {
-            $command = [$binary, 'x', '-y', '-o'.$extractDir, $input['absolute_path']];
-        }
+        $this->runExtract($input, $options, $extractDir);
 
-        if (! empty($options['archive_password'])) {
-            $command[] = '-p'.$options['archive_password'];
+        // Re-package extracted contents as ZIP
+        $output  = $this->output($tool, $input, $conversionId, 'zip');
+        $command = [
+            $this->binaries->path('seven_zip'),
+            'a', '-tzip',
+            $output['absolute_path'],
+            // Add every item inside extractDir – works on both OSes
+            $extractDir . '/*',
+        ];
+
+        // On Windows 7-Zip needs backslashes for wildcards
+        if (PHP_OS_FAMILY === 'Windows') {
+            $command[array_key_last($command)] = str_replace('/', '\\', $extractDir . '\\*');
         }
 
         $this->binaries->run($command);
-
-        $output = $this->output($tool, $input, $conversionId, 'zip');
-        
-        $archiveSource = str_replace('/', DIRECTORY_SEPARATOR, $extractDir . '/*');
-
-        $this->binaries->run([
-            $this->binaries->path('seven_zip'),
-            'a',
-            '-tzip',
-            $output['absolute_path'],
-            $archiveSource,
-        ]);
 
         return $output;
     }
@@ -84,48 +84,61 @@ class ArchiveConversionService
         $extractDir = "{$workDir}/archive-convert";
         File::ensureDirectoryExists($extractDir, 0750, true);
 
-        $binary = $this->extractBinary($input);
-        if (str_contains(strtolower(basename($binary)), 'unrar')) {
-            $extractCommand = [$binary, 'x', '-y', $input['absolute_path'], $extractDir . DIRECTORY_SEPARATOR];
-        } else {
-            $extractCommand = [$binary, 'x', '-y', '-o'.$extractDir, $input['absolute_path']];
-        }
-
-        if (! empty($options['archive_password'])) {
-            $extractCommand[] = '-p'.$options['archive_password'];
-        }
-
-        $this->binaries->run($extractCommand);
+        $this->runExtract($input, $options, $extractDir);
 
         $extension = $tool['output_extension'] ?: 'zip';
-        $output = $this->output($tool, $input, $conversionId, $extension);
+        $output    = $this->output($tool, $input, $conversionId, $extension);
 
-        $archiveSource = str_replace('/', DIRECTORY_SEPARATOR, $extractDir . '/*');
+        $source = $extractDir . '/*';
+        if (PHP_OS_FAMILY === 'Windows') {
+            $source = str_replace('/', '\\', $extractDir . '\\*');
+        }
 
         $this->binaries->run([
             $this->binaries->path('seven_zip'),
             'a',
-            '-t'.$extension,
+            '-t' . $extension,
             $output['absolute_path'],
-            $archiveSource,
+            $source,
         ]);
 
         return $output;
     }
 
-    private function extractBinary(array $input): string
+    // -------------------------------------------------------------------------
+    // Helpers
+    // -------------------------------------------------------------------------
+
+    /**
+     * Run the appropriate extraction command (unrar for .rar, 7z for everything else).
+     */
+    private function runExtract(array $input, array $options, string $extractDir): void
     {
-        if (($input['extension'] ?? null) === 'rar') {
-            return $this->binaries->path('unrar');
+        $binary = ($input['extension'] ?? null) === 'rar'
+            ? $this->binaries->path('unrar')
+            : $this->binaries->path('seven_zip');
+
+        $isUnrar = str_contains(strtolower(basename($binary)), 'unrar');
+
+        if ($isUnrar) {
+            // unrar x -y <archive> <destination/>
+            $command = [$binary, 'x', '-y', $input['absolute_path'], $extractDir . '/'];
+        } else {
+            // 7z x -y -o<destination> <archive>
+            $command = [$binary, 'x', '-y', '-o' . $extractDir, $input['absolute_path']];
         }
 
-        return $this->binaries->path('seven_zip');
+        if (! empty($options['archive_password'])) {
+            $command[] = '-p' . $options['archive_password'];
+        }
+
+        $this->binaries->run($command);
     }
 
     private function output(array $tool, array $input, string $conversionId, string $extension): array
     {
         $base = Str::slug(pathinfo($input['original_name'], PATHINFO_FILENAME)) ?: 'archive';
 
-        return $this->files->outputPath($conversionId, "{$base}-{$tool['id']}.".strtolower($extension));
+        return $this->files->outputPath($conversionId, "{$base}-{$tool['id']}." . strtolower($extension));
     }
 }

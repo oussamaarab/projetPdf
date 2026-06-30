@@ -1,0 +1,92 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# render.yaml – Render Infrastructure-as-Code for ConvertHub backend
+#
+# Deploy with:  render deploy --confirm
+# Or connect this repo in the Render dashboard and it will be auto-detected.
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+  - type: web
+    name: converthub-api
+    runtime: docker
+    dockerfilePath: ./Dockerfile
+    dockerContext: .
+
+    # Render assigns the PORT env var automatically; our entrypoint reads it.
+    # plan: starter        # uncomment to pin a paid plan
+    # region: oregon       # uncomment to pin a region
+
+    envVars:
+      - key: APP_ENV
+        value: production
+
+      - key: APP_DEBUG
+        value: "false"
+
+      # Generate once with:  php artisan key:generate --show
+      - key: APP_KEY
+        generateValue: true    # Render generates & persists this automatically
+
+      - key: APP_URL
+        # Render sets RENDER_EXTERNAL_URL; override this after first deploy.
+        value: https://converthub-api.onrender.com
+
+      - key: FRONTEND_URL
+        value: https://your-frontend.onrender.com   # update after frontend deploy
+
+      # CORS – add any additional allowed origins as a comma-separated list
+      - key: ALLOWED_ORIGINS
+        value: https://your-frontend.onrender.com   # update after frontend deploy
+
+      # Uncomment to allow all *.onrender.com preview URLs:
+      # - key: ALLOWED_ORIGINS_PATTERNS
+      #   value: "https://.*\\.onrender\\.com"
+
+      - key: LOG_LEVEL
+        value: error
+
+      # Session / cache / queue (file-based, no external services required)
+      - key: SESSION_DRIVER
+        value: file
+      - key: CACHE_STORE
+        value: file
+      - key: QUEUE_CONNECTION
+        value: sync
+
+      # Auth / conversion settings
+      - key: API_TOKEN_TTL_MINUTES
+        value: "120"
+      - key: CONVERSION_TEMP_TTL_MINUTES
+        value: "120"
+      - key: CONVERSION_MAX_UPLOAD_MB
+        value: "250"
+      - key: CONVERSION_PROCESS_TIMEOUT
+        value: "900"
+
+      # Binary names – on Linux/Docker these are already on PATH.
+      # Override here if you ever change the Docker image.
+      - key: FFMPEG_BINARY
+        value: ffmpeg
+      - key: FFPROBE_BINARY
+        value: ffprobe
+      - key: GHOSTSCRIPT_BINARY
+        value: gs
+      - key: LIBREOFFICE_BINARY
+        value: soffice
+      - key: IMAGEMAGICK_BINARY
+        value: magick
+      - key: SEVEN_ZIP_BINARY
+        value: 7z
+      - key: UNRAR_BINARY
+        value: unrar
+
+      # Optional – comma-separated list of admin email addresses
+      - key: ADMIN_EMAILS
+        value: ""
+
+    disk:
+      name: converthub-storage
+      mountPath: /var/www/html/storage/app
+      sizeGB: 5       # increase as needed; Render minimum is 1 GB
+
+    healthCheckPath: /api/health

@@ -1,0 +1,52 @@
+version: "3.9"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# ConvertHub – local Docker Compose
+#
+# Usage:
+#   docker compose up --build          # first run
+#   docker compose up                  # subsequent runs
+#   docker compose exec app php artisan conversion:check   # verify binaries
+#   docker compose down -v             # stop + remove volumes
+# ─────────────────────────────────────────────────────────────────────────────
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: converthub-backend:local
+    container_name: converthub_app
+    ports:
+      - "${PORT:-8000}:${PORT:-8000}"
+    environment:
+      PORT: "${PORT:-8000}"
+      APP_ENV: local
+      APP_DEBUG: "true"
+      APP_URL: "http://localhost:${PORT:-8000}"
+      FRONTEND_URL: "http://localhost:5173"
+      LOG_LEVEL: debug
+      SESSION_DRIVER: file
+      CACHE_STORE: file
+      QUEUE_CONNECTION: sync
+      # Binary names – already on PATH inside the container
+      FFMPEG_BINARY: ffmpeg
+      FFPROBE_BINARY: ffprobe
+      GHOSTSCRIPT_BINARY: gs
+      LIBREOFFICE_BINARY: soffice
+      IMAGEMAGICK_BINARY: magick
+      SEVEN_ZIP_BINARY: 7z
+      UNRAR_BINARY: unrar
+    volumes:
+      # Persist converted files and tokens across restarts
+      - converthub_storage:/var/www/html/storage/app
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${PORT:-8000}/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+volumes:
+  converthub_storage:
+    driver: local

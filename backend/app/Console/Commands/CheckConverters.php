@@ -8,21 +8,21 @@ use App\Services\Media\BinaryService;
 class CheckConverters extends Command
 {
     protected $signature = 'conversion:check';
-    protected $description = 'Verify that all required external conversion binaries are installed and discoverable on Windows.';
+    protected $description = 'Verify that all required external conversion binaries are installed and discoverable.';
 
     public function handle(BinaryService $binaries): int
     {
         $tools = [
-            'imagemagick' => 'ImageMagick (magick/convert)',
-            'ffmpeg'      => 'FFmpeg (ffmpeg)',
-            'ffprobe'     => 'FFprobe (ffprobe)',
-            'ghostscript' => 'Ghostscript (gswin64c/gs)',
+            'imagemagick' => 'ImageMagick (magick / convert)',
+            'ffmpeg'      => 'FFmpeg',
+            'ffprobe'     => 'FFprobe',
+            'ghostscript' => 'Ghostscript (gs / gswin64c)',
             'libreoffice' => 'LibreOffice (soffice)',
             'seven_zip'   => '7-Zip (7z)',
             'unrar'       => 'UnRAR (unrar)',
         ];
 
-        $this->info("Checking conversion tool executables...\n");
+        $this->info('OS: ' . PHP_OS_FAMILY . ' — checking conversion binaries…' . PHP_EOL);
         $allPassed = true;
 
         foreach ($tools as $key => $name) {
