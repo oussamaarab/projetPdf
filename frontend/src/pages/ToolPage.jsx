@@ -183,6 +183,21 @@ const ToolPage = () => {
   const handleDownload = async () => {
     if (!result?.id) return;
 
+    // Prefer the signed download_url from the API response — it works directly
+    // in the browser without needing axios / session cookies.
+    if (result.download_url) {
+      const a = document.createElement('a');
+      a.href = result.download_url;
+      a.download = result.filename || result.original_filename || 'converted-file';
+      a.target = '_blank';
+      a.rel = 'noopener noreferrer';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      return;
+    }
+
+    // Fallback: stream via axios (preserves session cookie for auth).
     try {
       const blob = await toolService.downloadFile(result.id);
       const url = window.URL.createObjectURL(blob);
@@ -193,8 +208,13 @@ const ToolPage = () => {
       a.click();
       window.URL.revokeObjectURL(url);
       document.body.removeChild(a);
-    } catch {
-      setError('Download failed. Please try again.');
+    } catch (err) {
+      const msg =
+        err.response?.data?.message ||
+        err.response?.data?.error ||
+        err.message ||
+        'Download failed. Please try again.';
+      setError(msg);
     }
   };
 
