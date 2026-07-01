@@ -48,10 +48,14 @@ RUN for policy in \
 done
 
 # ── Python packages: install from pinned requirements ─────────────────────────
-# These match the versions tested on Windows and are pinned for reproducibility.
-# pdf2docx  → PDF → DOCX structural conversion (replaces broken LibreOffice path)
-# python-pptx + Pillow → PDF → PPTX packaging
-COPY venv/requirements.txt /tmp/py-requirements.txt
+# requirements.txt lives at the project root and is maintained alongside the
+# PHP codebase. It pins every package used by the Python helper scripts:
+#   app/Scripts/pdf_to_docx.py  – pdf2docx, PyMuPDF
+#   app/Scripts/pdf_to_pptx.py  – python-pptx, Pillow
+#
+# The --break-system-packages flag is required on Debian 12+ where pip refuses
+# to install into the system Python without an explicit override.
+COPY requirements.txt /tmp/py-requirements.txt
 RUN pip3 install --break-system-packages -r /tmp/py-requirements.txt 2>/dev/null || \
     pip3 install -r /tmp/py-requirements.txt
 

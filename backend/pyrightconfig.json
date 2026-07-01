@@ -1,0 +1,18 @@
+{
+  "include": [
+    "app/Scripts"
+  ],
+  "exclude": [
+    "vendor",
+    "node_modules",
+    "venv"
+  ],
+  "venvPath": ".",
+  "venv": "venv",
+  "pythonVersion": "3.11",
+  "typeCheckingMode": "basic",
+  "useLibraryCodeForTypes": true,
+  "reportMissingImports": "warning",
+  "reportMissingModuleSource": "none",
+  "reportGeneralTypeIssues": "none"
+}

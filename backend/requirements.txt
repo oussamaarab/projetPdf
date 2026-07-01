@@ -1,0 +1,44 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# ConvertHub – Python dependencies
+#
+# Used by:
+#   app/Scripts/pdf_to_docx.py   → pdf2docx, PyMuPDF
+#   app/Scripts/pdf_to_pptx.py   → python-pptx, Pillow
+#
+# Install (Windows – project venv):
+#   python -m venv venv
+#   venv\Scripts\pip install -r requirements.txt
+#
+# Install (Linux / Docker):
+#   pip3 install -r requirements.txt
+#
+# Install (macOS):
+#   python3 -m venv venv
+#   venv/bin/pip install -r requirements.txt
+# ─────────────────────────────────────────────────────────────────────────────
+
+# PDF → DOCX structural conversion (replaces broken LibreOffice PDF→DOCX path)
+pdf2docx==0.5.13
+
+# PDF → PPTX slide packaging
+python-pptx==1.0.2
+
+# Image processing (used by both scripts)
+Pillow==12.2.0
+
+# ── Transitive dependencies pinned for reproducibility ───────────────────────
+# pdf2docx dependencies
+PyMuPDF==1.28.0
+numpy==2.4.6
+opencv-python-headless==4.13.0.92
+fonttools==4.63.0
+fire==0.7.1
+termcolor==3.3.0
+
+# python-docx (pulled by pdf2docx)
+python-docx==1.2.0
+lxml==6.1.1
+typing_extensions==4.15.0
+
+# xlsxwriter (present in venv, harmless to pin)
+xlsxwriter==3.2.9

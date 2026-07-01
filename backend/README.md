@@ -1,29 +1,157 @@
-# ConvertHub Laravel 12 Backend
+# ConvertHub – Laravel 12 Backend
 
-Production-ready REST backend for the React frontend in `../frontend`.
+Production-ready REST API backend for the React/Vite frontend in `../frontend`.
 
-## No Database
+---
 
-This backend intentionally uses no database, migrations, models, or Eloquent.
+## Architecture
 
-- Sessions: `file`
-- Cache and rate limiting: `file`
-- Queue default: `sync`
-- Temporary API tokens: JSON files in `storage/app/tokens`
-- Conversions/history/favorites: JSON files in `storage/app/conversions`
+- **No database** – all state lives in JSON files under `storage/app/`
+- Sessions, cache, rate-limiting: `file` driver
+- Queue: `sync` (in-process) by default, Redis-optional
+- Auth: custom file-based token system (no Sanctum DB tables required)
+
+| Store | Location |
+|---|---|
+| Tokens | `storage/app/tokens/*.json` |
+| Conversions | `storage/app/conversions/records/*.json` |
+| User index | `storage/app/conversions/users/*.json` |
+
+---
+
+## Quick Start
+
+```bash
+# 1 – PHP dependencies
+composer install
+
+# 2 – Environment
+cp .env.example .env
+php artisan key:generate
+
+# 3 – Python dependencies (see full instructions below)
+python -m venv venv
+venv\Scripts\pip install -r requirements.txt   # Windows
+# or
+venv/bin/pip install -r requirements.txt       # macOS / Linux
+
+# 4 – Start the development server
+php artisan serve
+```
+
+> **Do NOT run `php artisan migrate`** – there is no database schema.
+
+---
+
+## Python Setup
+
+Two Python scripts power PDF conversions that cannot be handled by system binaries alone:
+
+| Script | Purpose | Key package |
+|---|---|---|
+| `app/Scripts/pdf_to_docx.py` | PDF → DOCX structural conversion | `pdf2docx` |
+| `app/Scripts/pdf_to_pptx.py` | PDF → PPTX (images packaged as slides) | `python-pptx` |
+
+### Why a venv?
+
+The project ships a `requirements.txt` at the root. All packages must be installed
+in the **project venv** (`./venv/`) so that:
+
+1. Laravel can auto-detect the venv Python on Windows without any `.env` configuration.
+2. VS Code / Pylance resolves imports correctly.
+3. Docker installs the exact same pinned versions.
+
+---
+
+### Windows
+
+```powershell
+# From the backend directory
+python -m venv venv
+venv\Scripts\pip install -r requirements.txt
+```
+
+Verify:
+
+```powershell
+venv\Scripts\python.exe -c "from pdf2docx import Converter; from pptx import Presentation; from PIL import Image; print('All imports OK')"
+```
+
+> The venv must be at `backend/venv/`. `PdfConversionService` auto-detects
+> `venv/Scripts/python.exe` before falling back to the system Python.
+
+---
+
+### Linux / macOS
+
+```bash
+# System-wide (recommended for servers)
+pip3 install -r requirements.txt
+
+# Or inside a venv
+python3 -m venv venv
+venv/bin/pip install -r requirements.txt
+```
+
+Verify:
+
+```bash
+python3 -c "from pdf2docx import Converter; from pptx import Presentation; from PIL import Image; print('All imports OK')"
+```
+
+---
+
+### Docker
+
+Python packages are installed automatically during the Docker build from `requirements.txt`.
+No manual steps are needed:
+
+```dockerfile
+COPY requirements.txt /tmp/py-requirements.txt
+RUN pip3 install --break-system-packages -r /tmp/py-requirements.txt
+```
+
+Build and run:
+
+```bash
+docker compose up --build
+```
+
+---
+
+### VS Code / Pylance
+
+The `.vscode/settings.json` and `pyrightconfig.json` at the project root
+tell Pylance to use `./venv` as the Python environment.
+
+After installing packages into the venv, **reload the VS Code window**:
+
+```
+Ctrl+Shift+P → "Python: Select Interpreter" → choose ./venv/Scripts/python.exe
+Ctrl+Shift+P → "Developer: Reload Window"
+```
+
+The "Import could not be resolved" warnings for `pdf2docx`, `pptx`, and `PIL`
+will disappear.
+
+---
 
 ## Required System Binaries
 
-Install these on the server and set the paths in `.env` when they are not available on `PATH`.
+Install these on the server. Set the full path in `.env` only when the binary
+is **not** on the system `PATH`.
 
-- FFmpeg and FFprobe
-- Ghostscript
-- LibreOffice
-- ImageMagick
-- 7-Zip
-- UnRAR
+| Binary | Purpose |
+|---|---|
+| FFmpeg + FFprobe | Video / audio conversion |
+| Ghostscript | PDF merge, split, compress, protect |
+| LibreOffice | Office → PDF (DOCX/XLSX/PPTX → PDF) |
+| ImageMagick | PDF ↔ images, rotate, watermark |
+| 7-Zip | Archive create / extract / convert |
+| UnRAR | RAR extraction |
+| Python 3.10+ | PDF → DOCX and PDF → PPTX scripts |
 
-Windows examples:
+### Windows `.env` examples
 
 ```env
 FFMPEG_BINARY=C:\ffmpeg\bin\ffmpeg.exe
@@ -35,71 +163,149 @@ SEVEN_ZIP_BINARY=C:\Program Files\7-Zip\7z.exe
 UNRAR_BINARY=C:\Program Files\WinRAR\UnRAR.exe
 ```
 
-## Installation
+On Linux / Docker the bare names (`ffmpeg`, `gs`, `soffice`, etc.) resolve
+automatically from `PATH` — no `.env` overrides are needed.
+
+### Verify all binaries
 
 ```bash
-composer install
-cp .env.example .env
-php artisan key:generate
-php artisan serve
+php artisan conversion:check
 ```
 
-Do not run migrations. None are required.
+---
 
-For the React app, set:
+## Environment Variables
+
+Copy `.env.example` to `.env` and adjust:
 
 ```env
-VITE_API_URL=http://127.0.0.1:8000/api
+APP_ENV=local
+APP_KEY=           # generated by php artisan key:generate
+APP_URL=http://localhost:8000
+FRONTEND_URL=http://localhost:5173
+
+# Auth
+API_TOKEN_TTL_MINUTES=120
+ADMIN_EMAILS=admin@example.com
+
+# Conversion limits
+CONVERSION_TEMP_TTL_MINUTES=120
+CONVERSION_MAX_UPLOAD_MB=250
+CONVERSION_PROCESS_TIMEOUT=900
 ```
+
+---
 
 ## Queue
 
-The default `QUEUE_CONNECTION=sync` works without a database and runs conversions during the request.
+Default: `QUEUE_CONNECTION=sync` — conversions run inline during the HTTP request.
 
-For production background processing without a database, use Redis:
+For background processing without a database, use Redis:
 
 ```env
 QUEUE_CONNECTION=redis
 CACHE_STORE=redis
 ```
 
-Then run:
+Then start a worker:
 
 ```bash
 php artisan queue:work --tries=1 --timeout=0
 ```
 
+---
+
 ## Cleanup
 
-Temporary files expire according to `CONVERSION_TEMP_TTL_MINUTES`.
-
-Run manually:
+Expired conversion files are removed by:
 
 ```bash
 php artisan conversions:cleanup
 ```
 
-Or schedule Laravel's scheduler:
+Schedule it via Laravel's built-in scheduler:
 
 ```bash
 php artisan schedule:work
 ```
 
-## Main API
+---
 
-- `POST /api/register`
-- `POST /api/login`
-- `POST /api/logout`
-- `GET /api/user`
-- `POST /api/convert`
-- `GET /api/conversions`
-- `GET /api/conversions/{id}`
-- `GET /api/conversions/{id}/download`
-- `DELETE /api/conversions/{id}`
-- `GET /api/tools`
-- `GET /api/tools/{tool}`
-- `GET /api/favorites`
-- `POST /api/favorites`
-- `DELETE /api/favorites/{tool}`
+## API Reference
 
-Tool-specific aliases such as `POST /api/pdf/merge`, `POST /api/video/trim`, and `POST /api/archive/extract` are also registered.
+### Auth
+| Method | Endpoint | Auth |
+|---|---|---|
+| POST | `/api/register` | – |
+| POST | `/api/login` | – |
+| POST | `/api/logout` | token |
+| GET | `/api/user` | token |
+| PUT | `/api/user/profile` | token |
+| PUT | `/api/user/password` | token |
+
+### Conversions
+| Method | Endpoint | Auth |
+|---|---|---|
+| POST | `/api/convert` | guest/token |
+| GET | `/api/conversions` | token |
+| GET | `/api/conversions/{id}` | guest/token |
+| GET | `/api/conversions/{id}/download` | guest/token |
+| DELETE | `/api/conversions/{id}` | token |
+
+### Tools
+| Method | Endpoint | Auth |
+|---|---|---|
+| GET | `/api/tools` | – |
+| GET | `/api/tools/{tool}` | – |
+| GET | `/api/tools/category/{category}` | – |
+
+### Favorites
+| Method | Endpoint | Auth |
+|---|---|---|
+| GET | `/api/favorites` | token |
+| POST | `/api/favorites` | token |
+| DELETE | `/api/favorites/{tool}` | token |
+
+Tool-specific shortcut routes are also registered, e.g.:
+`POST /api/pdf/merge`, `POST /api/video/trim`, `POST /api/archive/extract`, etc.
+
+### System
+| Method | Endpoint | Auth |
+|---|---|---|
+| GET | `/api/health` | – |
+| GET | `/api/admin/stats` | admin token |
+
+---
+
+## Docker
+
+```bash
+# Build and start
+docker compose up --build
+
+# Run inside the container
+docker compose exec app php artisan conversion:check
+docker compose exec app php artisan conversions:cleanup
+
+# Stop
+docker compose down
+```
+
+See `render.yaml` for Render deployment configuration.
+
+---
+
+## Conversion Engine
+
+| Input → Output | Engine |
+|---|---|
+| PDF → DOCX / ODT / RTF | Python `pdf2docx` |
+| PDF → PPTX | ImageMagick + Python `python-pptx` |
+| PDF → JPG / ZIP | ImageMagick |
+| DOCX / XLSX / PPTX / HTML → PDF | LibreOffice |
+| PDF merge / split / compress | Ghostscript |
+| PDF rotate / watermark | ImageMagick |
+| Image convert / resize / compress | ImageMagick |
+| Video convert / compress / trim | FFmpeg |
+| Audio convert / compress / trim | FFmpeg |
+| Archive create / extract / convert | 7-Zip + UnRAR |
