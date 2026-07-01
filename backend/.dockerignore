@@ -15,8 +15,12 @@ resources/css
 # PHP / Composer – rebuilt inside the image
 vendor/
 
-# Python virtual-env – Python packages installed system-wide in the image
-venv/
+# Python virtual-env – packages are installed system-wide in the Docker image.
+# We DO copy requirements.txt so the Dockerfile can pin the same versions.
+venv/Lib/
+venv/Scripts/
+venv/Include/
+venv/pyvenv.cfg
 
 # Storage directories – mounted at runtime on Render (ephemeral)
 storage/logs/

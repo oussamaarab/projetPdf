@@ -47,15 +47,21 @@ RUN for policy in \
     fi; \
 done
 
-# ── Python: install python-pptx (needed by pdf_to_pptx.py) ───────────────────
-RUN pip3 install --break-system-packages python-pptx Pillow 2>/dev/null || \
-    pip3 install python-pptx Pillow
+# ── Python packages: install from pinned requirements ─────────────────────────
+# These match the versions tested on Windows and are pinned for reproducibility.
+# pdf2docx  → PDF → DOCX structural conversion (replaces broken LibreOffice path)
+# python-pptx + Pillow → PDF → PPTX packaging
+COPY venv/requirements.txt /tmp/py-requirements.txt
+RUN pip3 install --break-system-packages -r /tmp/py-requirements.txt 2>/dev/null || \
+    pip3 install -r /tmp/py-requirements.txt
 
-# ── Verify that key binaries are present ─────────────────────────────────────
+# ── Verify that key binaries and Python packages are present ─────────────────
 RUN ffmpeg -version 2>&1 | head -1 \
  && gs    --version \
  && soffice --version \
  && python3 --version \
+ && python3 -c "import pdf2docx; print('pdf2docx OK')" \
+ && python3 -c "from pptx import Presentation; print('python-pptx OK')" \
  && 7z i 2>&1 | head -2 \
  && (magick -version 2>/dev/null || convert -version 2>/dev/null | head -1)
 
